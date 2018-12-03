@@ -101,17 +101,32 @@ func (bg *fakeBlockGetter) assembleBlock(ctx context.Context,
 	return nil
 }
 
+const testFakeBlockSize = uint32(150)
+
 func makeFakeFileBlock(t *testing.T, doHash bool) *FileBlock {
 	buf := make([]byte, 16)
 	_, err := rand.Read(buf)
 	require.NoError(t, err)
 	block := &FileBlock{
+		CommonBlock: CommonBlock{
+			cachedEncodedSize: testFakeBlockSize,
+		},
 		Contents: buf,
 	}
 	if doHash {
 		_ = block.GetHash()
 	}
 	return block
+}
+
+func makeFakeFileBlockWithIPtrs(iptrs []IndirectFilePtr) *FileBlock {
+	return &FileBlock{
+		CommonBlock: CommonBlock{
+			IsInd:             true,
+			cachedEncodedSize: testFakeBlockSize,
+		},
+		IPtrs: iptrs,
+	}
 }
 
 func TestBlockRetrievalWorkerBasic(t *testing.T) {
@@ -326,7 +341,8 @@ func TestBlockRetrievalWorkerMultipleBlockTypes(t *testing.T) {
 	_, continueCh1 := bg.setBlockToReturn(ptr1, block1)
 	testCommonBlock := &CommonBlock{}
 	testCommonBlock.Set(block1)
-	require.Equal(t, &CommonBlock{}, testCommonBlock)
+	require.Equal(
+		t, &CommonBlock{cachedEncodedSize: testFakeBlockSize}, testCommonBlock)
 
 	t.Log("Make a retrieval for the same block twice, but with a different " +
 		"target block type.")
