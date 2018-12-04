@@ -1317,6 +1317,14 @@ type DiskBlockCache interface {
 	// space.
 	DoesCacheHaveSpace(
 		ctx context.Context, cacheType DiskBlockCacheType) (bool, error)
+	// AddHomeTLF adds a TLF marked as "home" so that the blocks from it are
+	// less likely to be evicted, as well as whether this is their public or
+	// private TLF, where the public TLF's files are more likely to be evicted
+	// than the private one's.
+	AddHomeTLF(ctx context.Context, tlfID tlf.ID, tlfType tlf.Type) error
+	// ClearHomeTLF should be called on logout so that the old user's TLFs
+	// are not still marked as home.
+	ClearHomeTLF(ctx context.Context) error
 	// Shutdown cleanly shuts down the disk block cache.
 	Shutdown(ctx context.Context)
 }

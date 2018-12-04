@@ -47,6 +47,9 @@ const (
 	workingSetCacheName           string = "WorkingSetBlockCache"
 )
 
+var errTeamOrUnknownTLFAddedAsHome = errors.New(
+	"Team or Unknown TLF added to disk block cache as home TLF")
+
 // DiskBlockCacheLocal is the standard implementation for DiskBlockCache.
 type DiskBlockCacheLocal struct {
 	config     diskBlockCacheConfig
@@ -80,6 +83,9 @@ type DiskBlockCacheLocal struct {
 	currBytes uint64
 	// Track the last unref'd revisions for each TLF.
 	tlfLastUnrefs map[tlf.ID]kbfsmd.Revision
+	// Don't evict files from the user's private or public home directory.
+	// Higher numbers are more important not to evict.
+	homeDirs map[tlf.ID]int
 
 	startedCh  chan struct{}
 	startErrCh chan struct{}
@@ -894,35 +900,52 @@ func (cache *DiskBlockCacheLocal) evictLocked(ctx context.Context,
 		}
 	}()
 	numElements := numBlocks * evictionConsiderationFactor
-	blockID, err := cache.getRandomBlockID(numElements, cache.numBlocks)
-	if err != nil {
-		return 0, 0, err
-	}
-	rng := &util.Range{Start: blockID.Bytes(), Limit: cache.maxBlockID}
-	iter := cache.metaDb.NewIterator(rng, nil)
-	defer iter.Release()
-
 	blockIDs := make(blockIDsByTime, 0, numElements)
+	maxPriorityForEviction := 0
 
-	for i := 0; i < numElements; i++ {
-		if !iter.Next() {
-			break
-		}
-		key := iter.Key()
+	// Repeatedly double the search space until there are enough evictable
+	// blocks. If we reach the whole cache size, then give up and relax which
+	// blocks can be evicted.
+	for ; blockIDs.Len() < numBlocks && maxPriorityForEviction < 2; numElements *= 2 {
+		// Clear the slice without reallocating the underlying memory.
+		blockIDs = blockIDs[:0]
 
-		if err != nil {
-			cache.log.CWarningf(ctx, "Error decoding block ID %x", key)
-			continue
+		// If we're searching all the blocks and still not finding some to
+		// evict, relax our constraints.
+		if numElements > cache.numBlocks {
+			numElements = cache.numBlocks
+			maxPriorityForEviction++
 		}
-		blockID, err := kbfsblock.IDFromBytes(key)
-		metadata := DiskBlockCacheMetadata{}
-		err = cache.config.Codec().Decode(iter.Value(), &metadata)
+		blockID, err := cache.getRandomBlockID(numElements, cache.numBlocks)
 		if err != nil {
-			cache.log.CWarningf(ctx, "Error decoding metadata for block %s",
-				blockID)
-			continue
+			return 0, 0, err
 		}
-		blockIDs = append(blockIDs, lruEntry{blockID, metadata.LRUTime.Time})
+		rng := &util.Range{Start: blockID.Bytes(), Limit: cache.maxBlockID}
+		iter := cache.metaDb.NewIterator(rng, nil)
+		defer iter.Release()
+
+		for i := 0; i < numElements; i++ {
+			if !iter.Next() {
+				break
+			}
+			key := iter.Key()
+
+			if err != nil {
+				cache.log.CWarningf(ctx, "Error decoding block ID %x", key)
+				continue
+			}
+			blockID, err := kbfsblock.IDFromBytes(key)
+			metadata := DiskBlockCacheMetadata{}
+			err = cache.config.Codec().Decode(iter.Value(), &metadata)
+			if err != nil {
+				cache.log.CWarningf(ctx, "Error decoding metadata for block %s",
+					blockID)
+				continue
+			}
+			if cache.homeDirs[metadata.TlfID] <= maxPriorityForEviction {
+				blockIDs = append(blockIDs, lruEntry{blockID, metadata.LRUTime.Time})
+			}
+		}
 	}
 
 	return cache.evictSomeBlocks(ctx, numBlocks, blockIDs)
@@ -1102,6 +1125,30 @@ func (cache *DiskBlockCacheLocal) DoesCacheHaveSpace(
 	default:
 		panic(fmt.Sprintf("Unknown cache type: %d", cache.cacheType))
 	}
+}
+
+// AddHomeTLF adds a TLF marked as "home" so that the blocks from it are
+// less likely to be evicted, as well as whether this is their public or
+// private TLF, where the public TLF's files are more likely to be evicted
+// than the private one's.
+func (cache *DiskBlockCacheLocal) AddHomeTLF(ctx context.Context,
+	tlfID tlf.ID, tlfType tlf.Type) error {
+	switch tlfType {
+	case tlf.Private:
+		cache.homeDirs[tlfID] = 2
+	case tlf.Public:
+		cache.homeDirs[tlfID] = 1
+	default:
+		return errTeamOrUnknownTLFAddedAsHome
+	}
+	return nil
+}
+
+// ClearHomeTLF should be called on logout so that the old user's TLFs
+// are not still marked as home.
+func (cache *DiskBlockCacheLocal) ClearHomeTLF(ctx context.Context) error {
+	cache.homeDirs = make(map[tlf.ID]int)
+	return nil
 }
 
 // Shutdown implements the DiskBlockCache interface for DiskBlockCacheLocal.

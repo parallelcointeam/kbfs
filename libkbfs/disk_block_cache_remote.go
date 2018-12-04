@@ -163,6 +163,18 @@ func (dbcr *DiskBlockCacheRemote) DoesCacheHaveSpace(
 	panic("DoesSyncCacheHaveSpace() not implemented in DiskBlockCacheRemote")
 }
 
+// AddHomeTLF implements the DiskBlockCache interface for DiskBlockCacheRemote.
+func (dbcr *DiskBlockCacheRemote) AddHomeTLF(ctx context.Context,
+	tlfID tlf.ID, tlfType tlf.Type) error {
+	panic("AddHomeTLF() not implemented in DiskBlockCacheRemote")
+}
+
+// ClearHomeTLF implements the DiskBlockCache interface for
+// DiskBlockCacheRemote.
+func (dbcr *DiskBlockCacheRemote) ClearHomeTLF(ctx context.Context) error {
+	panic("ClearHomeTLF() not implemented in DiskBlockCacheRemote")
+}
+
 // Shutdown implements the DiskBlockCache interface for DiskBlockCacheRemote.
 func (dbcr *DiskBlockCacheRemote) Shutdown(ctx context.Context) {
 	dbcr.conn.Close()

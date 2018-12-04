@@ -332,6 +332,28 @@ func (cache *diskBlockCacheWrapped) waitForDeletes(ctx context.Context) error {
 	return cache.deleteGroup.Wait(ctx)
 }
 
+// AddHomeTLF implements the DiskBlockCache interface for diskBlockCacheWrapped.
+func (cache *diskBlockCacheWrapped) AddHomeTLF(ctx context.Context,
+	tlfID tlf.ID, tlfType tlf.Type) error {
+	cache.mtx.RLock()
+	defer cache.mtx.RUnlock()
+	if cache.syncCache == nil {
+		return errors.New("Sync cache not enabled")
+	}
+	return cache.AddHomeTLF(ctx, tlfID, tlfType)
+}
+
+// ClearHomeTLF implements the DiskBlockCache interface for
+// diskBlockCacheWrapped.
+func (cache *diskBlockCacheWrapped) ClearHomeTLF(ctx context.Context) error {
+	cache.mtx.RLock()
+	defer cache.mtx.RUnlock()
+	if cache.syncCache == nil {
+		return errors.New("Sync cache not enabled")
+	}
+	return cache.syncCache.ClearHomeTLF(ctx)
+}
+
 // Shutdown implements the DiskBlockCache interface for diskBlockCacheWrapped.
 func (cache *diskBlockCacheWrapped) Shutdown(ctx context.Context) {
 	cache.mtx.Lock()

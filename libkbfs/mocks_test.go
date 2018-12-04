@@ -5110,6 +5110,30 @@ func (mr *MockDiskBlockCacheMockRecorder) DoesCacheHaveSpace(ctx, cacheType inte
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DoesCacheHaveSpace", reflect.TypeOf((*MockDiskBlockCache)(nil).DoesCacheHaveSpace), ctx, cacheType)
 }
 
+// AddHomeTLF mocks base method
+func (m *MockDiskBlockCache) AddHomeTLF(ctx context.Context, tlfID tlf.ID, tlfType tlf.Type) error {
+	ret := m.ctrl.Call(m, "AddHomeTLF", ctx, tlfID, tlfType)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// AddHomeTLF indicates an expected call of AddHomeTLF
+func (mr *MockDiskBlockCacheMockRecorder) AddHomeTLF(ctx, tlfID, tlfType interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "AddHomeTLF", reflect.TypeOf((*MockDiskBlockCache)(nil).AddHomeTLF), ctx, tlfID, tlfType)
+}
+
+// ClearHomeTLF mocks base method
+func (m *MockDiskBlockCache) ClearHomeTLF(ctx context.Context) error {
+	ret := m.ctrl.Call(m, "ClearHomeTLF", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// ClearHomeTLF indicates an expected call of ClearHomeTLF
+func (mr *MockDiskBlockCacheMockRecorder) ClearHomeTLF(ctx interface{}) *gomock.Call {
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ClearHomeTLF", reflect.TypeOf((*MockDiskBlockCache)(nil).ClearHomeTLF), ctx)
+}
+
 // Shutdown mocks base method
 func (m *MockDiskBlockCache) Shutdown(ctx context.Context) {
 	m.ctrl.T.Helper()
