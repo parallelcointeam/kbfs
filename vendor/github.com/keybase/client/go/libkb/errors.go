@@ -77,6 +77,14 @@ func NewProofError(s keybase1.ProofStatus, d string, a ...interface{}) *ProofErr
 	return &ProofErrorImpl{s, fmt.Sprintf(d, a...)}
 }
 
+func NewInvalidPVLSelectorError(selector keybase1.SelectorEntry) error {
+	return NewProofError(
+		keybase1.ProofStatus_INVALID_PVL,
+		"JSON selector entry must be a string, int, or 'all' %v",
+		selector,
+	)
+}
+
 func (e *ProofErrorImpl) Error() string {
 	return fmt.Sprintf("%s (code=%d)", e.Desc, int(e.Status))
 }
@@ -167,6 +175,22 @@ func (e AssertionParseError) Error() string {
 
 func NewAssertionParseError(s string, a ...interface{}) AssertionParseError {
 	return AssertionParseError{
+		err: fmt.Sprintf(s, a...),
+	}
+}
+
+//=============================================================================
+
+type AssertionCheckError struct {
+	err string
+}
+
+func (e AssertionCheckError) Error() string {
+	return e.err
+}
+
+func NewAssertionCheckError(s string, a ...interface{}) AssertionCheckError {
+	return AssertionCheckError{
 		err: fmt.Sprintf(s, a...),
 	}
 }
@@ -915,6 +939,18 @@ func (e BadServiceError) Error() string {
 	return e.Service + ": unsupported service"
 }
 
+type ServiceDoesNotSupportNewProofsError struct {
+	Service string
+}
+
+func (e ServiceDoesNotSupportNewProofsError) Error() string {
+	service := e.Service
+	if len(service) > 0 {
+		service = fmt.Sprintf("%q", service)
+	}
+	return fmt.Sprintf("New %s proofs are no longer supported", service)
+}
+
 //=============================================================================
 
 type NotConfirmedError struct{}
@@ -1643,6 +1679,7 @@ const (
 	ResolutionErrorAmbiguous
 	ResolutionErrorRateLimited
 	ResolutionErrorInvalidInput
+	ResolutionErrorRequestFailed
 )
 
 type ResolutionError struct {
@@ -1658,6 +1695,14 @@ func (e ResolutionError) Error() string {
 func IsResolutionError(err error) bool {
 	_, ok := err.(ResolutionError)
 	return ok
+}
+
+func IsResolutionNotFoundError(err error) bool {
+	rerr, ok := err.(ResolutionError)
+	if !ok {
+		return false
+	}
+	return rerr.Kind == ResolutionErrorNotFound
 }
 
 //=============================================================================

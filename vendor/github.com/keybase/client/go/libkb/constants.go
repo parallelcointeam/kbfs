@@ -204,6 +204,7 @@ const (
 	SCReloginRequired                  = int(keybase1.StatusCode_SCReloginRequired)
 	SCResolutionFailed                 = int(keybase1.StatusCode_SCResolutionFailed)
 	SCProfileNotPublic                 = int(keybase1.StatusCode_SCProfileNotPublic)
+	SCRateLimit                        = int(keybase1.StatusCode_SCRateLimit)
 	SCBadSignupUsernameTaken           = int(keybase1.StatusCode_SCBadSignupUsernameTaken)
 	SCBadInvitationCode                = int(keybase1.StatusCode_SCBadInvitationCode)
 	SCFeatureFlag                      = int(keybase1.StatusCode_SCFeatureFlag)
@@ -225,6 +226,7 @@ const (
 	SCKeyRevoked                       = int(keybase1.StatusCode_SCKeyRevoked)
 	SCSigCannotVerify                  = int(keybase1.StatusCode_SCSigCannotVerify)
 	SCSibkeyAlreadyExists              = int(keybase1.StatusCode_SCSibkeyAlreadyExists)
+	SCSigCreationDisallowed            = int(keybase1.StatusCode_SCSigCreationDisallowed)
 	SCDecryptionKeyNotFound            = int(keybase1.StatusCode_SCDecryptionKeyNotFound)
 	SCBadTrackSession                  = int(keybase1.StatusCode_SCBadTrackSession)
 	SCDeviceBadName                    = int(keybase1.StatusCode_SCDeviceBadName)
@@ -308,6 +310,10 @@ const (
 	SCBadSignupUsernameDeleted         = int(keybase1.StatusCode_SCBadSignupUsernameDeleted)
 	SCEphemeralPairwiseMACsMissingUIDs = int(keybase1.StatusCode_SCEphemeralPairwiseMACsMissingUIDs)
 	SCStellarNeedDisclaimer            = int(keybase1.StatusCode_SCStellarNeedDisclaimer)
+	SCStellarDeviceNotMobile           = int(keybase1.StatusCode_SCStellarDeviceNotMobile)
+	SCStellarMobileOnlyPurgatory       = int(keybase1.StatusCode_SCStellarMobileOnlyPurgatory)
+	SCStellarIncompatibleVersion       = int(keybase1.StatusCode_SCStellarIncompatibleVersion)
+	SCStellarMissingAccount            = int(keybase1.StatusCode_SCStellarMissingAccount)
 )
 
 const (
@@ -476,14 +482,6 @@ const (
 )
 
 const (
-	KexScryptCost       = 32768
-	KexScryptR          = 8
-	KexScryptP          = 1
-	KexScryptKeylen     = 32
-	KexSessionIDEntropy = 65 // kex doc specifies 65 bits of entropy
-)
-
-const (
 	Kex2PhraseEntropy  = 88
 	Kex2PhraseEntropy2 = 99 // we've upped the entropy to 99 bits after the 2018 NCC Audit
 	Kex2ScryptCost     = 1 << 17
@@ -563,9 +561,10 @@ const (
 	DeriveReasonPUKSigning    DeriveReason = "Derived-User-NaCl-EdDSA-1"
 	DeriveReasonPUKEncryption DeriveReason = "Derived-User-NaCl-DH-1"
 	// Context used for chaining generations of PerUserKeys.
-	DeriveReasonPUKPrev            DeriveReason = "Derived-User-NaCl-SecretBox-1"
-	DeriveReasonPUKStellarBundle   DeriveReason = "Derived-User-NaCl-SecretBox-StellarBundle-1"
-	DeriveReasonPUKStellarNoteSelf DeriveReason = "Derived-User-NaCl-SecretBox-StellarSelfNote-1"
+	DeriveReasonPUKPrev              DeriveReason = "Derived-User-NaCl-SecretBox-1"
+	DeriveReasonPUKStellarBundle     DeriveReason = "Derived-User-NaCl-SecretBox-StellarBundle-1"
+	DeriveReasonPUKStellarNoteSelf   DeriveReason = "Derived-User-NaCl-SecretBox-StellarSelfNote-1"
+	DeriveReasonPUKStellarAcctBundle DeriveReason = "Derived-User-NaCl-SecretBox-StellarAcctBundle-1"
 
 	DeriveReasonDeviceEKEncryption  DeriveReason = "Derived-Ephemeral-Device-NaCl-DH-1"
 	DeriveReasonUserEKEncryption    DeriveReason = "Derived-Ephemeral-User-NaCl-DH-1"
