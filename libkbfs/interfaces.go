@@ -1321,10 +1321,10 @@ type DiskBlockCache interface {
 	// less likely to be evicted, as well as whether this is their public or
 	// private TLF, where the public TLF's files are more likely to be evicted
 	// than the private one's.
-	AddHomeTLF(ctx context.Context, tlfID tlf.ID, tlfType tlf.Type) error
-	// ClearHomeTLF should be called on logout so that the old user's TLFs
+	AddHomeTLF(ctx context.Context, tlfID tlf.ID) error
+	// ClearHomeTLFs should be called on logout so that the old user's TLFs
 	// are not still marked as home.
-	ClearHomeTLF(ctx context.Context) error
+	ClearHomeTLFs(ctx context.Context) error
 	// Shutdown cleanly shuts down the disk block cache.
 	Shutdown(ctx context.Context)
 }

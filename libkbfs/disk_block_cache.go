@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"math"
+	"math/rand"
 	"path/filepath"
 	"sort"
 	"sync"
@@ -50,6 +51,14 @@ const (
 var errTeamOrUnknownTLFAddedAsHome = errors.New(
 	"Team or Unknown TLF added to disk block cache as home TLF")
 
+type evictionPriority int
+
+const (
+	priorityNotHome evictionPriority = iota
+	priorityPublicHome
+	priorityPrivateHome
+)
+
 // DiskBlockCacheLocal is the standard implementation for DiskBlockCache.
 type DiskBlockCacheLocal struct {
 	config     diskBlockCacheConfig
@@ -85,7 +94,7 @@ type DiskBlockCacheLocal struct {
 	tlfLastUnrefs map[tlf.ID]kbfsmd.Revision
 	// Don't evict files from the user's private or public home directory.
 	// Higher numbers are more important not to evict.
-	homeDirs map[tlf.ID]int
+	homeDirs map[tlf.ID]evictionPriority
 
 	startedCh  chan struct{}
 	startErrCh chan struct{}
@@ -216,6 +225,7 @@ func newDiskBlockCacheLocalFromStorage(
 		evictSizeMeter:   NewCountMeter(),
 		deleteCountMeter: NewCountMeter(),
 		deleteSizeMeter:  NewCountMeter(),
+		homeDirs:         map[tlf.ID]evictionPriority{},
 		log:              log,
 		blockDb:          blockDb,
 		metaDb:           metaDb,
@@ -885,12 +895,42 @@ func (cache *DiskBlockCacheLocal) evictFromTLFLocked(ctx context.Context,
 	return cache.evictSomeBlocks(ctx, numBlocks, blockIDs)
 }
 
-// evictLocked evicts a number of blocks from the cache.  We choose a pivot
-// variable b randomly. Then begin an iterator into cache.metaDb.Range(b,
-// MaxBlockID) and iterate from there to get numBlocks *
-// evictionConsiderationFactor block IDs.  We sort the resulting blocks by
-// value (LRU time) and pick the minimum numBlocks. We then call cache.Delete()
-// on that list of block IDs.
+func (cache *DiskBlockCacheLocal) randomTlfForEvictionLocked(minEvictBlocks int) (tlf.
+	ID, error) {
+	totalCount := 0
+	var priorityToEvict evictionPriority
+	for priorityToEvict = priorityNotHome; (totalCount <= minEvictBlocks) &&
+		(priorityToEvict <= priorityPrivateHome); priorityToEvict++ {
+		for tlfId, count := range cache.tlfCounts {
+			if cache.homeDirs[tlfId] == priorityToEvict {
+				totalCount += count
+			}
+		}
+	}
+	if totalCount == 0 {
+		// TODO: make that a variable error
+		return tlf.ID{}, errors.New("No files to evict")
+	}
+	// TODO: maybe also error if we can only find <minEvictBlocks blocks
+
+	randIdx := rand.Intn(totalCount)
+
+	soFar := 0
+	for tlfId, count := range cache.tlfCounts {
+		if cache.homeDirs[tlfId] <= priorityToEvict {
+			soFar += count
+			if soFar > randIdx {
+				return tlfId, nil
+			}
+		}
+	}
+	// TODO: do something else here, maybe
+	return tlf.ID{}, errors.New("Something went wrong while counting TLFs")
+}
+
+// evictLocked evicts a number of blocks from the cache.  We choose a TLF to
+// evict from randomly, weighted by the number of blocks in that TLF. We only
+// include home dirs if the other TLFs are all too small.
 func (cache *DiskBlockCacheLocal) evictLocked(ctx context.Context,
 	numBlocks int) (numRemoved int, sizeRemoved int64, err error) {
 	defer func() {
@@ -899,56 +939,15 @@ func (cache *DiskBlockCacheLocal) evictLocked(ctx context.Context,
 			cache.evictSizeMeter.Mark(sizeRemoved)
 		}
 	}()
-	numElements := numBlocks * evictionConsiderationFactor
-	blockIDs := make(blockIDsByTime, 0, numElements)
-	maxPriorityForEviction := 0
 
-	// Repeatedly double the search space until there are enough evictable
-	// blocks. If we reach the whole cache size, then give up and relax which
-	// blocks can be evicted.
-	for ; blockIDs.Len() < numBlocks && maxPriorityForEviction < 2; numElements *= 2 {
-		// Clear the slice without reallocating the underlying memory.
-		blockIDs = blockIDs[:0]
-
-		// If we're searching all the blocks and still not finding some to
-		// evict, relax our constraints.
-		if numElements > cache.numBlocks {
-			numElements = cache.numBlocks
-			maxPriorityForEviction++
-		}
-		blockID, err := cache.getRandomBlockID(numElements, cache.numBlocks)
-		if err != nil {
-			return 0, 0, err
-		}
-		rng := &util.Range{Start: blockID.Bytes(), Limit: cache.maxBlockID}
-		iter := cache.metaDb.NewIterator(rng, nil)
-		defer iter.Release()
-
-		for i := 0; i < numElements; i++ {
-			if !iter.Next() {
-				break
-			}
-			key := iter.Key()
-
-			if err != nil {
-				cache.log.CWarningf(ctx, "Error decoding block ID %x", key)
-				continue
-			}
-			blockID, err := kbfsblock.IDFromBytes(key)
-			metadata := DiskBlockCacheMetadata{}
-			err = cache.config.Codec().Decode(iter.Value(), &metadata)
-			if err != nil {
-				cache.log.CWarningf(ctx, "Error decoding metadata for block %s",
-					blockID)
-				continue
-			}
-			if cache.homeDirs[metadata.TlfID] <= maxPriorityForEviction {
-				blockIDs = append(blockIDs, lruEntry{blockID, metadata.LRUTime.Time})
-			}
-		}
+	// Pick a random key of cache.tlfCounts, weighted by the counts, removing
+	// home dirs.
+	tlfID, err := cache.randomTlfForEvictionLocked(numBlocks)
+	if err != nil {
+		return 0, 0, err
 	}
-
-	return cache.evictSomeBlocks(ctx, numBlocks, blockIDs)
+	// TODO: deal with the case where we grabbed a very small TLF
+	return cache.evictFromTLFLocked(ctx, tlfID, numBlocks)
 }
 
 func (cache *DiskBlockCacheLocal) deleteNextBatchFromClearedTlf(
@@ -1127,27 +1126,27 @@ func (cache *DiskBlockCacheLocal) DoesCacheHaveSpace(
 	}
 }
 
-// AddHomeTLF adds a TLF marked as "home" so that the blocks from it are
-// less likely to be evicted, as well as whether this is their public or
-// private TLF, where the public TLF's files are more likely to be evicted
-// than the private one's.
-func (cache *DiskBlockCacheLocal) AddHomeTLF(ctx context.Context,
-	tlfID tlf.ID, tlfType tlf.Type) error {
-	switch tlfType {
+// AddHomeTLF implements this DiskBlockCache interace for DiskBlockCacheLocal.
+func (cache *DiskBlockCacheLocal) AddHomeTLF(ctx context.Context, tlfID tlf.ID) error {
+	cache.lock.Lock()
+	defer cache.lock.Unlock()
+	switch tlfID.Type() {
 	case tlf.Private:
-		cache.homeDirs[tlfID] = 2
+		cache.homeDirs[tlfID] = priorityPrivateHome
 	case tlf.Public:
-		cache.homeDirs[tlfID] = 1
+		cache.homeDirs[tlfID] = priorityPublicHome
 	default:
 		return errTeamOrUnknownTLFAddedAsHome
 	}
 	return nil
 }
 
-// ClearHomeTLF should be called on logout so that the old user's TLFs
-// are not still marked as home.
-func (cache *DiskBlockCacheLocal) ClearHomeTLF(ctx context.Context) error {
-	cache.homeDirs = make(map[tlf.ID]int)
+// ClearHomeTLFs implements this DiskBlockCache interace for
+// DiskBlockCacheLocal.
+func (cache *DiskBlockCacheLocal) ClearHomeTLFs(ctx context.Context) error {
+	cache.lock.Lock()
+	defer cache.lock.Unlock()
+	cache.homeDirs = make(map[tlf.ID]evictionPriority)
 	return nil
 }
 
