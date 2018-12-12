@@ -3669,8 +3669,8 @@ func (fbo *folderBlockOps) MarkNode(
 		return nil
 	}
 
-	fbo.blockLock.Lock(lState)
-	defer fbo.blockLock.Unlock(lState)
+	fbo.blockLock.RLock(lState)
+	defer fbo.blockLock.RUnlock(lState)
 
 	chargedTo, err := fbo.getChargedToLocked(ctx, lState, kmd)
 	if err != nil {
