@@ -250,7 +250,8 @@ func TestDiskBlockCacheDelete(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Log("Delete two of the blocks from the cache.")
-	_, _, err = cache.Delete(ctx, []kbfsblock.ID{block1Ptr.ID, block2Ptr.ID})
+	_, _, err = cache.Delete(
+		ctx, []kbfsblock.ID{block1Ptr.ID, block2Ptr.ID}, DiskBlockAnyCache)
 	require.NoError(t, err)
 
 	t.Log("Verify that only the non-deleted block is still in the cache.")
@@ -566,7 +567,8 @@ func TestDiskBlockCacheWithRetrievalQueue(t *testing.T) {
 
 	t.Log("Remove the block from the disk cache to rule it out for " +
 		"the next step.")
-	numRemoved, _, err := cache.Delete(ctx, []kbfsblock.ID{ptr1.ID})
+	numRemoved, _, err := cache.Delete(
+		ctx, []kbfsblock.ID{ptr1.ID}, DiskBlockAnyCache)
 	require.NoError(t, err)
 	require.Equal(t, 1, numRemoved)
 
