@@ -80,6 +80,7 @@ type GlobalContext struct {
 	teamEKBoxStorage TeamEKBoxStorage // Store team ephemeral key boxes
 	ekLib            EKLib            // Wrapper to call ephemeral key methods
 	itciCacher       LRUer            // Cacher for implicit team conflict info
+	iteamCacher      MemLRUer         // In memory cacher for implicit teams
 	cardCache        *UserCardCache   // cache of keybase1.UserCard objects
 	fullSelfer       FullSelfer       // a loader that gets the full self object
 	pvlSource        MerkleStore      // a cache and fetcher for pvl
@@ -259,6 +260,10 @@ func (g *GlobalContext) SetDNSNameServerFetcher(d DNSNameServerFetcher) {
 	g.DNSNSFetcher = d
 }
 
+func (g *GlobalContext) SetUPAKLoader(u UPAKLoader) {
+	g.upakLoader = u
+}
+
 // simulateServiceRestart simulates what happens when a service restarts for the
 // purposes of testing.
 func (g *GlobalContext) simulateServiceRestart() {
@@ -347,10 +352,16 @@ func (g *GlobalContext) ConfigureLogging() error {
 			logFile = filePrefix + ".log"
 		}
 	}
+	// Configure the log file, setting a default one if not specified and LogPrefix is not specified
+	// Does not redirect logs to file until g.Log.RotateLogFile is called
 	if logFile == "" {
 		g.Log.Configure(style, debug, g.Env.GetDefaultLogFile())
 	} else {
 		g.Log.Configure(style, debug, logFile)
+	}
+	// If specified or explicitly requested to use default log file, redirect logs.
+	// If not called, prints logs to stdout.
+	if logFile != "" || g.Env.GetUseDefaultLogFile() {
 		g.Log.RotateLogFile()
 	}
 	g.Output = os.Stdout
@@ -591,6 +602,18 @@ func (g *GlobalContext) SetImplicitTeamConflictInfoCacher(l LRUer) {
 	g.cacheMu.RLock()
 	defer g.cacheMu.RUnlock()
 	g.itciCacher = l
+}
+
+func (g *GlobalContext) GetImplicitTeamCacher() MemLRUer {
+	g.cacheMu.RLock()
+	defer g.cacheMu.RUnlock()
+	return g.iteamCacher
+}
+
+func (g *GlobalContext) SetImplicitTeamCacher(l MemLRUer) {
+	g.cacheMu.RLock()
+	defer g.cacheMu.RUnlock()
+	g.iteamCacher = l
 }
 
 func (g *GlobalContext) GetFullSelfer() FullSelfer {
